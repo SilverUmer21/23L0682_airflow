@@ -1,0 +1,51 @@
+# Extra services that `astro dev start` runs next to Airflow: MongoDB (database) and Mongo Express (web admin UI).
+# Astro merges this file into its own docker-compose project automatically.
+#
+# Docker networking : every service joins the project network "airflow", so containers reach each other by service
+#                     name (the DAG connects to host "mongo", Mongo Express connects to host "mongo").
+# Persistent storage: MongoDB writes to the named volume "mongo_data", so the data survives container restarts
+#                     and `astro dev stop` / `astro dev start` (only `astro dev kill` deletes it).
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: currency_mongo
+    restart: unless-stopped
+    env_file:
+      - .env  # supplies MONGO_INITDB_ROOT_USERNAME / MONGO_INITDB_ROOT_PASSWORD (the password is never written here)
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - airflow
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    labels:
+      com.example.network: "airflow (bridge); reachable by other services as host 'mongo' on port 27017"
+      com.example.storage: "named volume mongo_data mounted at /data/db"
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: currency_mongo_express
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    env_file:
+      - .env  # supplies ME_CONFIG_MONGODB_URL (host "mongo" = the service name) and ME_CONFIG_BASICAUTH
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      - airflow
+    labels:
+      com.example.network: "airflow (bridge); talks to MongoDB at mongo:27017, UI published on 127.0.0.1:8081"
+      com.example.storage: "none (stateless, all data lives in MongoDB's volume)"
+
+volumes:
+  mongo_data:
+    name: airflow_currency_mongo_data
+
+networks:
+  airflow:
+    name: airflow_currency_net

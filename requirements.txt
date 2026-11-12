@@ -1,0 +1,2 @@
+# Astro Runtime already includes Airflow and `requests`. Extra packages for this project:
+pymongo>=4.10,<5
